@@ -15,14 +15,14 @@ import { useToast } from '@/hooks/use-toast';
 import { getInspirationAction } from '@/app/actions';
 import { Textarea } from '@/components/ui/textarea';
 import type { Verse } from '@/lib/verses';
+import { Skeleton } from './ui/skeleton';
 
 interface VerseCardProps {
-  initialVerse: Verse;
   allVerses: Verse[];
 }
 
-export function VerseCard({ initialVerse, allVerses }: VerseCardProps) {
-  const [currentVerse, setCurrentVerse] = useState(initialVerse);
+export function VerseCard({ allVerses }: VerseCardProps) {
+  const [currentVerse, setCurrentVerse] = useState<Verse | null>(null);
   const [inspiration, setInspiration] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -32,6 +32,19 @@ export function VerseCard({ initialVerse, allVerses }: VerseCardProps) {
   const { toast } = useToast();
 
   useEffect(() => {
+    const getDailyVerse = () => {
+      const now = new Date();
+      const startOfYear = new Date(now.getFullYear(), 0, 0);
+      const diff = now.getTime() - startOfYear.getTime();
+      const oneDay = 1000 * 60 * 60 * 24;
+      const dayOfYear = Math.floor(diff / oneDay);
+      return allVerses[dayOfYear % allVerses.length];
+    };
+    setCurrentVerse(getDailyVerse());
+  }, [allVerses]);
+
+  useEffect(() => {
+    if (!currentVerse) return;
     try {
       const savedNotes = localStorage.getItem(`notes_${currentVerse.reference}`);
       if (savedNotes) {
@@ -49,6 +62,7 @@ export function VerseCard({ initialVerse, allVerses }: VerseCardProps) {
   }, [currentVerse]);
 
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (!currentVerse) return;
     const newNotes = e.target.value;
     setNotes(newNotes);
     try {
@@ -68,12 +82,13 @@ export function VerseCard({ initialVerse, allVerses }: VerseCardProps) {
       let newVerse;
       do {
         newVerse = allVerses[Math.floor(Math.random() * allVerses.length)];
-      } while (newVerse.reference === currentVerse.reference);
+      } while (newVerse.reference === currentVerse?.reference);
       setCurrentVerse(newVerse);
     });
   };
 
   const handleShare = async () => {
+    if (!currentVerse) return;
     const shareData = {
       title: 'Daily Scripture Spark',
       text: `"${currentVerse.text}" - ${currentVerse.reference}`,
@@ -100,6 +115,7 @@ export function VerseCard({ initialVerse, allVerses }: VerseCardProps) {
   };
 
   const handleGetInspiration = async () => {
+    if (!currentVerse) return;
     if (inspiration) {
       // If inspiration is already loaded, just open the accordion
       setAccordionValue('inspiration-item');
@@ -132,20 +148,27 @@ export function VerseCard({ initialVerse, allVerses }: VerseCardProps) {
 
   return (
     <Card className="w-full max-w-2xl shadow-lg border-2 border-primary/10 bg-card">
-      <CardContent className="p-6 md:p-10 text-center">
-        <div
-          key={currentVerse.reference}
-          className="animate-in fade-in duration-700"
-        >
-          <blockquote className="space-y-4">
-            <p className="font-body text-xl md:text-2xl leading-relaxed text-foreground">
-              “{currentVerse.text}”
-            </p>
-            <figcaption className="font-headline text-lg text-primary font-semibold">
-              — {currentVerse.reference}
-            </figcaption>
-          </blockquote>
-        </div>
+      <CardContent className="p-6 md:p-10 text-center min-h-[170px]">
+        {currentVerse ? (
+          <div
+            key={currentVerse.reference}
+            className="animate-in fade-in duration-700"
+          >
+            <blockquote className="space-y-4">
+              <p className="font-body text-xl md:text-2xl leading-relaxed text-foreground">
+                “{currentVerse.text}”
+              </p>
+              <figcaption className="font-headline text-lg text-primary font-semibold">
+                — {currentVerse.reference}
+              </figcaption>
+            </blockquote>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-6 w-1/3 mx-auto" />
+          </div>
+        )}
       </CardContent>
       <Separator />
       <CardFooter className="flex-col items-stretch p-0">
@@ -155,7 +178,7 @@ export function VerseCard({ initialVerse, allVerses }: VerseCardProps) {
             size="lg"
             onClick={handleRefresh}
             aria-label="Get a new verse"
-            disabled={isPending}
+            disabled={isPending || !currentVerse}
             className="flex-1"
           >
             {isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
@@ -166,15 +189,16 @@ export function VerseCard({ initialVerse, allVerses }: VerseCardProps) {
             size="lg"
             onClick={handleShare}
             aria-label="Share this verse"
+            disabled={!currentVerse}
             className="flex-1"
           >
             <Share2 className="h-5 w-5" />
             <span className="ml-2 hidden sm:inline">Share</span>
           </Button>
         </div>
-        <Accordion type="single" collapsible className="w-full" value={accordionValue} onValueChange={onAccordionChange}>
+        <Accordion type="single" collapsible className="w-full" value={accordionValue} onValueChange={onAccordionChange} disabled={!currentVerse}>
           <AccordionItem value="inspiration-item" className="border-t">
-            <AccordionTrigger className="w-full p-4 justify-center hover:no-underline text-primary hover:bg-accent/50 text-base font-medium">
+            <AccordionTrigger className="w-full p-4 justify-center hover:no-underline text-primary hover:bg-accent/50 text-base font-medium disabled:text-muted-foreground disabled:no-underline">
               <div className="flex items-center">
                 <Sparkles className="mr-2 h-5 w-5 text-accent"/>
                 Get an Inspirational Message
@@ -195,7 +219,7 @@ export function VerseCard({ initialVerse, allVerses }: VerseCardProps) {
             </AccordionContent>
           </AccordionItem>
            <AccordionItem value="notes-item" className="border-t">
-            <AccordionTrigger className="w-full p-4 justify-center hover:no-underline text-primary hover:bg-accent/50 text-base font-medium">
+            <AccordionTrigger className="w-full p-4 justify-center hover:no-underline text-primary hover:bg-accent/50 text-base font-medium disabled:text-muted-foreground disabled:no-underline">
                 <div className="flex items-center">
                     <BookText className="mr-2 h-5 w-5 text-accent" />
                     My Notes
